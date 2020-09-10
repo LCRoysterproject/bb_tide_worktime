@@ -1,0 +1,12 @@
+To answer your question about the Pressures, I got these explanations from the Diver Manual:
+
+PH = P0 · exp[ –(M·g·H)/(R·T)]
+where
+PH = atmospheric pressure at elevation height H
+P0 = atmospheric pressure at reference height
+M = 28.8 · 10-3 kg/mol (molecular mass of air)
+g = 9.81 m/s2
+(standard gravity)
+H = height in meters
+R = 8.314 J/mol/K (gas constant)
+T = temperature in Kelvin

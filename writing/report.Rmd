@@ -1,0 +1,255 @@
+---
+title: "Report"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library("tidyverse")
+library("dplyr")
+library("ggplot2")
+library("rtide") 
+library("scales")
+library("BBmisc")
+```
+
+I used pressure measurements taken from a vanEssen CTD Diver sensor and standard equations provided by manufacture to estimate depth of the sensor based on pressure measurements.  The sensor was located at water quality station 3 as part of the Lone Cabbage oyster reef restoration project.  I then compared these estimated depth measurements to the observed and predicted tidal fluctuations at the Cedar Key NOAA gauge (CDRF1) located approximately 10-km south. In general the amplitude of tidal change at the sensor is less than the observed and predicted tidal change at the Cedar Key gauge. Additionally, the sensor appears to experience low water (shallower depth) approximately 30-90 minutes later than the observations at the Cedar Key station.
+
+##Elevation Formula as per Diver Sensor CTD Manual, below are the variables and equation specifics:
+  
+Ph= atmospheric pressure at elevation height at H  
+P0= atmospheric pressure at reference height  
+m= 28.8 *10^-3  
+g= 9.81 m/s (standard gravity)  
+R= 8.314 j/mol/k  
+t= temperature in Kelvin   
+H= height  
+  
+Ph= P0*^- (M*g*H)/(R*T)  
+  
+WQ 3 is -1.422m   
+Cedar Key tide guage is at zero is -0.687  
+
+```{r cars, include= FALSE, message=FALSE, warning= FALSE}
+
+#### Reading all of the observed tidal files that are .txt
+
+#### Verified tidal
+setwd("C:\\Users\\melimore86\\Desktop\\tide_inundation\\data\\tidal")
+
+tidal_temp = list.files(pattern="*.csv")
+
+# Combining all files into a data frame
+tidal <- do.call(rbind, lapply(tidal_temp, function(x) read.csv(x, stringsAsFactors = FALSE)))
+
+#For tides need to round to the nearest hour to match with the pressure
+
+tidal$date<- paste(tidal$Date, tidal$Time..GMT.)
+
+tidal$date<- as.POSIXct(tidal$date, format="%m/%d/%Y %H:%M")
+
+colnames(tidal)<- c("datex", "timex", "predicted", "prelim", "verified", "date")
+
+tidal$normalization<- normalize(tidal$verified, method= "range", range= c(0,1), margin = 1L, on.constant = "quiet")
+
+
+####Predicted tidal 
+
+tidal$pred_normalization<- normalize(tidal$predicted, method= "range", range= c(0,1), margin = 1L, on.constant = "quiet")
+
+
+##### Sensor 3 data
+#### Time before January 2018 is subject to incorrect daylight saving time, time *****
+
+setwd("C:\\Users\\melimore86\\Desktop\\tide_inundation\\data\\wq")
+
+site_3<-read.csv("wq.csv", header=T)
+
+#Pressure data are cm
+site_3<- site_3 %>% 
+  filter(Site==3) %>% 
+  select(Date, Pressure, Temperature)
+
+colnames(site_3)<- c("date", "pressure", "temperaure")
+
+site_3$kelvin<- (site_3$temperaure + 273.15)
+```
+
+
+```{r wq_date,include= FALSE, message=FALSE, warning= FALSE}
+site_3$date<- as.POSIXct(site_3$date)
+
+sub.1 <- subset(site_3, date >= as.POSIXct('2017-03-12 02:00:00') &
+                  date <= as.POSIXct('2017-11-05 01:00:00'))
+
+sub.1$date<- sub.1$date + 4* 60 *60
+
+sub.2 <- subset(site_3, date >= as.POSIXct('2017-11-05 02:00:00') &
+                  date <= as.POSIXct('2018-05-11 05:00:00'))
+
+sub.2$date<- sub.2$date + 5* 60 *60
+
+site<- site_3 %>% 
+  filter(!(date <= '2018-05-11 06:00:00'))
+
+site.1<-site_3 %>% 
+  filter(date >= '2018-05-11 06:00:00')
+
+
+site.2<- rbind(sub.1, sub.2)
+site_3<- rbind(site.2, site.1)
+
+```
+
+
+```{r wq_ph,include= FALSE, message=FALSE, warning= FALSE}
+site_3$ph<- (site_3$pressure*(-(exp((0.0288*9.81*-1.422)/(8.314*site_3$kelvin)))))
+
+#normalization using `normalize` from the package BBmisc
+
+site_3$normalization<- normalize(site_3$ph, method= "range", range= c(0,1), margin = 1L, on.constant = "quiet")
+
+```
+
+
+###January 1-2 2019
+```{r jan_plot, echo=FALSE, message=FALSE, warning= FALSE, fig.width=8}
+
+ggplot() +
+  geom_line(data = tidal, aes(x = as.POSIXct(date), y = pred_normalization, color= "Predicted Tidal Height (m)"), size =1.2)  +
+  
+  geom_line(data = tidal, aes(x = as.POSIXct(date), y = normalization, color= "Observed Tidal Height (m)"), size =1.2)  +
+  
+  geom_line(data = site_3, aes(x = as.POSIXct(date), y = normalization, color= "Calculated Elevation"), size =1.2)  +
+   
+  scale_x_datetime(name = "January 1-2, 2019 GMT", #<- can be in labs(), also, but fine here, since we need to use scale_x_dateime anyways
+                   labels = date_format("%d-%H:%M"),
+                   breaks = "4 hours",
+                   limits = c(
+                     as.POSIXct("2019-01-01 00:00:00 GMT"),
+                     as.POSIXct("2019-01-02 00:00:00 GMT"))) +
+  
+  #scale_linetype_manual(values = c(1,2,3)) + 
+  
+  scale_colour_manual(values=c("#0072B2","#D55E00","#CC79A7")) +
+  
+  labs(title= "Cedar Key", y= "Tide Height NAVD (m)", color= "Tidal Lines") +
+
+  theme(legend.position=("right"),
+        panel.border = element_rect(color = "black", size = 1, fill = NA, linetype="solid"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) #<- to make the a-axis ticks 90 degrees
+```
+
+###February 1-2 2019
+```{r feb_plot, echo=FALSE, message=FALSE, warning= FALSE, fig.width=8}
+
+ggplot() +
+  geom_line(data = tidal, aes(x = as.POSIXct(date), y = pred_normalization, color= "Predicted Tidal Height (m)"), size =1.2)  +
+  
+  geom_line(data = tidal, aes(x = as.POSIXct(date), y = normalization, color= "Observed Tidal Height (m)"), size =1.2)  +
+  
+  geom_line(data = site_3, aes(x = as.POSIXct(date), y = normalization, color= "Calculated Elevation"), size =1.2)  +
+   
+  scale_x_datetime(name = "February 1-2, 2019 GMT", #<- can be in labs(), also, but fine here, since we need to use scale_x_dateime anyways
+                   labels = date_format("%d-%H:%M"),
+                   breaks = "4 hours",
+                   limits = c(
+                     as.POSIXct("2019-02-01 00:00:00 GMT"),
+                     as.POSIXct("2019-02-02 00:00:00 GMT"))) +
+  
+  #scale_linetype_manual(values = c(1,2,3)) + 
+  
+  scale_colour_manual(values=c("#0072B2","#D55E00","#CC79A7")) +
+  
+  labs(title= "Cedar Key", y= "Tide Height NAVD (m)", color= "Tidal Lines") +
+
+  theme(legend.position=("right"),
+        panel.border = element_rect(color = "black", size = 1, fill = NA, linetype="solid"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) #<- to make the a-axis ticks 90 degrees
+```
+
+
+###March 1-2 2019
+```{r march_plot, echo=FALSE, message=FALSE, warning= FALSE, fig.width=8}
+
+ggplot() +
+  geom_line(data = tidal, aes(x = as.POSIXct(date), y = pred_normalization, color= "Predicted Tidal Height (m)"), size =1.2)  +
+  
+  geom_line(data = tidal, aes(x = as.POSIXct(date), y = normalization, color= "Observed Tidal Height (m)"), size =1.2)  +
+  
+  geom_line(data = site_3, aes(x = as.POSIXct(date), y = normalization, color= "Calculated Elevation"), size =1.2)  +
+  scale_x_datetime(name = "March 1-2, 2019 GMT", #<- can be in labs(), also, but fine here, since we need to use scale_x_dateime anyways
+                   labels = date_format("%d-%H:%M"),
+                   breaks = "4 hours",
+                   limits = c(
+                     as.POSIXct("2019-03-01 00:00:00 GMT"),
+                     as.POSIXct("2019-03-02 00:00:00 GMT"))) +
+  
+  #scale_linetype_manual(values = c(1,2,3)) + 
+  
+  scale_colour_manual(values=c("#0072B2","#D55E00","#CC79A7")) +
+  
+  labs(title= "Cedar Key", y= "Tide Height NAVD (m)", color= "Tidal Lines") +
+
+  theme(legend.position=("right"),
+        panel.border = element_rect(color = "black", size = 1, fill = NA, linetype="solid"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) #<- to make the a-axis ticks 90 degrees
+```
+
+
+###April 1-2 2019
+```{r april_plot, echo=FALSE, message=FALSE, warning= FALSE, fig.width=8}
+
+ggplot() +
+  geom_line(data = tidal, aes(x = as.POSIXct(date), y = pred_normalization, color= "Predicted Tidal Height (m)"), size =1.2)  +
+  
+  geom_line(data = tidal, aes(x = as.POSIXct(date), y = normalization, color= "Observed Tidal Height (m)"), size =1.2)  +
+  
+  geom_line(data = site_3, aes(x = as.POSIXct(date), y = normalization, color= "Calculated Elevation"), size =1.2)  +
+  scale_x_datetime(name = "April 1-2, 2019 GMT", #<- can be in labs(), also, but fine here, since we need to use scale_x_dateime anyways
+                   labels = date_format("%d-%H:%M"),
+                   breaks = "4 hours",
+                   limits = c(
+                     as.POSIXct("2019-04-01 00:00:00 GMT"),
+                     as.POSIXct("2019-04-02 00:00:00 GMT"))) +
+  
+  #scale_linetype_manual(values = c(1,2,3)) + 
+  
+  scale_colour_manual(values=c("#0072B2","#D55E00","#CC79A7")) +
+  
+  labs(title= "Cedar Key", y= "Tide Height NAVD (m)", color= "Tidal Lines") +
+
+  theme(legend.position=("right"),
+        panel.border = element_rect(color = "black", size = 1, fill = NA, linetype="solid"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) #<- to make the a-axis ticks 90 degrees
+```
+
+
+
+###April 29-30, 2019
+```{r lateapril_plot, echo=FALSE, message=FALSE, warning= FALSE, fig.width=8}
+
+ggplot() +
+  geom_line(data = tidal, aes(x = as.POSIXct(date), y = pred_normalization, color= "Predicted Tidal Height (m)"), size =1.2)  +
+  
+  geom_line(data = tidal, aes(x = as.POSIXct(date), y = normalization, color= "Observed Tidal Height (m)"), size =1.2)  +
+  
+  geom_line(data = site_3, aes(x = as.POSIXct(date), y = normalization, color= "Calculated Elevation"), size =1.2)  +
+  scale_x_datetime(name = "April 29-30, 2019 GMT", #<- can be in labs(), also, but fine here, since we need to use scale_x_dateime anyways
+                   labels = date_format("%d-%H:%M"),
+                   breaks = "4 hours",
+                   limits = c(
+                     as.POSIXct("2019-04-29 00:00:00 GMT"),
+                     as.POSIXct("2019-04-30 00:00:00 GMT"))) +
+  
+  #scale_linetype_manual(values = c(1,2,3)) + 
+  
+  scale_colour_manual(values=c("#0072B2","#D55E00","#CC79A7")) +
+  
+  labs(title= "Cedar Key", y= "Tide Height NAVD (m)", color= "Tidal Lines") +
+
+  theme(legend.position=("right"),
+        panel.border = element_rect(color = "black", size = 1, fill = NA, linetype="solid"),
+        axis.text.x = element_text(angle = 45, hjust = 1)) #<- to make the a-axis ticks 90 degrees
+```

@@ -1,0 +1,180 @@
+---
+title: "CEDAR KEY, FL INUNDATION"
+output:  
+  html_document:  
+    toc: true  
+    toc_float: true  
+---
+
+```{r setup, include=FALSE}
+
+library("tidyverse")
+library("dplyr")
+library("ggplot2")
+library("rtide") 
+library("scales")
+library("BBmisc")
+library("lubridate")
+```
+
+### INTRODUCTION
+
+This is a document explaining how to use the following code to use the Diver Elevation Equation in relation to the tidal heights collected from Site 3, compensating using NOAA tidal heights. 
+
+
+### TIDAL HEIGHTS
+
+Use the same NOAA website to download the WATER LEVELS. You can only download the tidal height information for every 30 days. The settings for the tidal heights are:
+
+TIME:GMT  
+UNIT: METRIC  
+INTERVAL: 1 HOUR  
+DATUM: NAVD  
+
+Save the tidal files in another folder, and change the directory. It will be easy to apply the same `lapply` argument to read and combine all of the .csv files. It could be possible that it will not allow you to download the data file per hour because the data is too new, I would wait until that option is available before you download the data. The data files include actual tidal heights and predicted tidal heights. 
+
+```{r tidal_lappy}
+
+setwd("C:/Users/Mel/Desktop/tide_inundation/data/tidal")
+
+#### Verified tidal heights
+tidal_temp = list.files(pattern="*.csv")
+
+# Combining all files into a data frame
+tidal <- do.call(rbind, lapply(tidal_temp, function(x) read.csv(x, stringsAsFactors = FALSE)))
+
+```
+
+The time is in per hour, so there is no need to round the observations. Time is also in GMT, so it is cohesive with the AIR PRESSURE data. The column names are also updated using `colnames`.
+
+```{r tidal_date}
+tidal$date<- paste(tidal$Date, tidal$Time..GMT.)
+
+tidal$date<- as.POSIXct(tidal$date, format="%m/%d/%Y %H:%M")
+
+colnames(tidal)<- c("datex", "timex", "predicted", "prelim", "verified", "date")
+
+```
+
+The following code is to standardize the height data from 0 to 1. The package for the `normalize` argument is `BBmisc` for actual tidal heights. 
+
+```{r tidal_standardize}
+
+tidal$normalization<- normalize(tidal$verified, method= "range", range= c(0,1), margin = 1L, on.constant = "quiet")
+```
+
+The following code is to standardize the height data from 0 to 1. The package for the `normalize` argument is `BBmisc` for predicted tidal heights. 
+```{r tidal_pre_standardize}
+####Predicted tidal 
+tidal$pred_normalization<- normalize(tidal$predicted, method= "range", range= c(0,1), margin = 1L, on.constant = "quiet")
+
+```
+
+
+### SITE 3 BAROMETRIC PRESSURE IN cmH2O
+
+Similar as before, read in the data file, and we are filtering by Site 3, and selecting only the most necessary information for Diver Elevation Equation. 
+
+```{r site_data}
+setwd("C:/Users/Mel/Desktop/tide_inundation/data/wq")
+
+site_3<-read.csv("wq.csv", header=T)
+
+#Pressure data are cm
+site_3<- site_3 %>% 
+  filter(Site==3) %>% 
+  select(Date, Pressure, Temperature)
+
+colnames(site_3)<- c("date", "pressure", "temperaure")
+```
+#### KELVIN
+For the Site 3, temperature needs to be converted into Kelvin for the Diver Elevation Equation. The pressure collected from the Diver is cmH2O so we don't need to convert the barometric pressure. 
+
+```{r site_temp_date}
+#The Diver Equation requires termperature to be in Kelvin
+site_3$kelvin<- (site_3$temperaure + 273.15)
+```
+
+### SITE 3 DATE- TIME CORRECTION FOR EST
+Site 3, prior to 2019-05-11 06:00, was in time zone EST. After that date/time, it was adjusted to be in UTC timezone. Below is the code to subset and adjust for these times differences. Names of the subsetted data are irrelevant.
+
+```{r wq_date, message=FALSE, warning= FALSE}
+site_3$date<- as.POSIXct(site_3$date)
+
+sub.1 <- subset(site_3, date >= as.POSIXct('2017-03-12 02:00:00') &
+                  date <= as.POSIXct('2017-11-05 01:00:00'))
+
+sub.1$date<- sub.1$date + 4* 60 *60
+
+sub.2 <- subset(site_3, date >= as.POSIXct('2017-11-05 02:00:00') &
+                  date <= as.POSIXct('2018-05-11 05:00:00'))
+
+sub.2$date<- sub.2$date + 5* 60 *60
+
+site<- site_3 %>% 
+  filter(!(date <= '2018-05-11 06:00:00'))
+
+site.1<-site_3 %>% 
+  filter(date >= '2018-05-11 06:00:00')
+
+
+site.2<- rbind(sub.1, sub.2)
+site_3<- rbind(site.2, site.1)
+
+```
+
+
+###ELEVATION FORMULA
+
+Elevation Formula as per Diver manual, below are the different variables needed:  
+
+Ph= P0*^- (M*g*H)/(R*T)  
+
+*Ph= atmospheric pressure at elevation height at H*  
+*P0= atmospheric pressure at reference height*  
+*m= 28.8 *10^-3*  
+*g= 9.81 m/s (standard gravity)*  
+*R= 8.314 j/mol/k*  
+*t= temperature in Kelvin*   
+*H= height*  
+
+Water Quality 3 height is -1.422 meters as per project specifications.
+
+
+```{r}
+#Ph is the calculated final value from the inundation equation
+site_3$ph<- (site_3$pressure*(-(exp((0.0288*9.81*-1.422)/(8.314*site_3$kelvin)))))
+
+#Standarizing using `normalize` from the package BBmisc
+site_3$normalization<- normalize(site_3$ph, method= "range", range= c(0,1), margin = 1L, on.constant = "quiet")
+```
+
+###PLOTTING
+
+```{r plot, message= FALSE, warning=FALSE}
+ggplot() +
+  
+  geom_line(data = tidal, aes(x = as.POSIXct(date), y = pred_normalization, color= "Predicted Tidal Height (m)"), size =1.2)  + #<- color in aes() signifies the value of the line, not the physical color, this will generate an appropriate legend
+  
+  geom_line(data = tidal, aes(x = as.POSIXct(date), y = normalization, color= "Tidal Height (m)"), size =1.2)  +  #<- color in aes() signifies the value of the line, not the physical color, this will generate an appropriate legend
+  
+  geom_line(data = site_3, aes(x = as.POSIXct(date), y = normalization, color= "Calculated Elevation"), size =1.2)  +  #<- color in aes() signifies the value of the line, not the physical color, this will generate an appropriate legend
+   
+  scale_x_datetime(name = "January 1-2, 2019 GMT", #<- can be in labs(), also, but fine here, since we need to use scale_x_dateime anyways
+                   labels = date_format("%d-%H:%M"),
+                   breaks = "4 hours", #<- can adjust the breaks of the x-axis, you can change depending on what your start and end date are
+                   limits = c(
+                     as.POSIXct("2019-01-01 00:00:00 GMT"), #<- start date and time that can be edited
+                     as.POSIXct("2019-01-02 00:00:00 GMT"))) + #<- end date and time that can be edited
+  
+  #scale_linetype_manual(values = c(1,2,3)) + <- you can use this if you want to change the linetypes
+  
+  scale_colour_manual(values=c("#0072B2","#D55E00","#CC79A7")) + #<- specifying the colors here, in order as they appear, from a colorblind palette http://www.cookbook-r.com/Graphs/Colors_(ggplot2)/
+  
+  labs(title= "Cedar Key", y= "Tide Height NAVD (m)", color= "Tidal Lines") + #<- labs specify the x-axis, y-axis, and the "color" meaning not the actual colors of the lines but the value we are specifying in the lines, which in this case are Tidal Lines
+
+  theme(legend.position=("bottom"), #<- legend position at the bottom
+        panel.border = element_rect(color = "black", size = 1, fill = NA, linetype="solid"), #<- created a border around the figure
+        axis.text.x = element_text(angle = 45, hjust = 1)) #<- to make the a-axis ticks 45 degrees
+```
+
