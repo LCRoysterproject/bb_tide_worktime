@@ -24,8 +24,8 @@ library(suncalc)   # for sunrise/sunset
 # tide_stations() 
 
 # tide height from tide_stations is in MLLW in meters 
-start_date <- "2020-10-01"      # change to your start date "YYYY-MM-DD" 
-end_date   <- "2021-04-01"      # change to your end date "YYYY-MM-DD"
+start_date <- "2021-10-01"      # change to your start date "YYYY-MM-DD" 
+end_date   <- "2022-04-01"      # change to your end date "YYYY-MM-DD"
 start_date <- ymd(start_date)   # correct format 
 end_date   <- ymd(end_date)     # correct format
 
@@ -182,6 +182,6 @@ final <- clean_df[c("start_date",      # date to sample
 
 # save final file as "work_time_period_##.csv" 
 # where period is what sampling period it is
-write.csv(final, file = "data/work_time_period_22.csv")
+write.csv(final, file = "data/work_time_period_24.csv")
 
 
