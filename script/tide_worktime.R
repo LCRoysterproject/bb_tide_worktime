@@ -184,4 +184,19 @@ final <- clean_df[c("start_date",      # date to sample
 # where period is what sampling period it is
 write.csv(final, file = "data/work_time_period_24.csv")
 
+#simple graph using Jennifer's date tick
+
+names(final)
+final$start_date <- as.Date(final$start_date, "%m/%d/%Y")
+
+plot(final$start_date, final$mins_sun, xaxt = 'n', xlab = "Date", ylab = "Minutes of Sun")
+
+ticks.at <- seq(min(final$start_date), max(final$start_date),
+                by = "months")
+## format the labels as abbreviated month names
+ticks.lab <- format(ticks.at, format = "%b")
+
+axis(1, at = ticks.at, labels = ticks.lab)
+
+
 
