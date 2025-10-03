@@ -13,7 +13,7 @@ library(suncalc)
 
 ##### PARAMETERS #####
 start_date <- "2025-10-01"
-end_date   <- "2025-12-01"
+end_date   <- "2025-12-31"
 tz_eastern <- "America/New_York"
 
 start_date <- ymd(start_date)
@@ -60,7 +60,7 @@ dat_spliced <- dat[start_idx:end_idx, ]
 dat_spliced$datetime <- with_tz(as.POSIXct(dat_spliced$datetime, tz = attr(dat_spliced$datetime, "tzone") %||% "UTC"),
                                 tzone = tz_eastern)
 
-# robust pairing: find, for each start index, the first stop index after it
+#  find, for each start index, the first stop index after it
 start_idx_all <- which(dat_spliced$startstop == 1)
 stop_idx_all  <- which(dat_spliced$startstop == -1)
 
