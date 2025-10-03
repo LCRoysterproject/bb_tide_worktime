@@ -162,6 +162,11 @@ write.csv(final, file = "data/work_time_Oct_Nov_2025.csv", row.names = FALSE)
 # simple plot of minutes of sun by date (start_date is Date)
 final$start_date <- as.Date(final$start_date)
 
+# Save the plot as a JPEG image
+if (!dir.exists("figures")) dir.create("figures")
+jpeg(filename = "figures/minutes_of_sun_Oct_Nov_2025.jpg",
+     width = 1200, height = 800, units = "px", res = 150)
+
 # base plot without x axis, points only
 plot(final$start_date, final$mins_sun, xaxt = "n",
      xlab = "Date", ylab = "Minutes of Sun",
@@ -177,3 +182,6 @@ ticks.lab <- format(ticks.at, "%b %d")
 
 # draw axis with daily ticks; use las = 2 for vertical labels if needed
 axis(1, at = ticks.at, labels = ticks.lab, las = 2, cex.axis = 0.8)
+
+dev.off()
+
